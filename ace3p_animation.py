@@ -33,7 +33,7 @@ class CameraPosition(object):
     def update_camera(self):
         print "updating"
         camera = GetActiveCamera()
-        camera.SetFocalPoint([0,0,self.focus[2]])#self.focus)
+        camera.SetFocalPoint(self.focus)
         camera.SetPosition(self.focus[0] + self.radius*sin(self.phi)*cos(self.theta), 
                            self.focus[1] + self.radius*sin(self.phi)*sin(self.theta),
                            self.focus[2] + self.radius*cos(self.phi))
@@ -81,7 +81,9 @@ class Ace3pAnimataion(object):
     """holds all information related to the animation of ACE3P"""
     def __init__(self, mesh_file,
              mode_file,
-             trac3p_results=""):
+             trac3p_results="",
+             reflections=[] # http://www.itk.org/Wiki/ParaView/Users_Guide/List_of_filters#Reflect
+             ):
          
         # prevent goofy camera behavior
         paraview.simple._DisableFirstRenderCameraReset()
@@ -113,16 +115,14 @@ class Ace3pAnimataion(object):
             if len(self.particleFilenames) == 0:
                 print "No particles found at '%s'!" % particledir
                 sys.exit(0)
-            
+                
+        self.reflections = reflections
             
     def load_files(self):
         # Load mesh
         mesh = SLACDataReader(MeshFileName=self.mesh_file)
         mesh.ModeFileName = [self.mode_file]
         mesh.ReadInternalVolume = 1
-        reflectX = True
-        reflectY = False
-        reflectZ = False
         
         if self.use_track3p:
             # Load the particles
@@ -148,7 +148,7 @@ class Ace3pAnimataion(object):
         DataRepresentation1.ColorAttributeType = 'POINT_DATA'
         DataRepresentation1.Representation = 'Wireframe'
         DataRepresentation1.BackfaceRepresentation = 'Surface'
-        #DataRepresentation1.Visibility = 0
+        DataRepresentation1.Visibility = 0
         
         DataRepresentation2 = Show()
         DataRepresentation2.Visibility = 0
@@ -182,9 +182,10 @@ class Ace3pAnimataion(object):
         DataRepresentation4.Visibility = 0
         
         # reflect mesh
-        # http://www.itk.org/Wiki/ParaView/Users_Guide/List_of_filters#Reflect
-        Reflect1 = Reflect()
-        Reflect1.Plane = 'X'
+        for plane in self.reflections:
+            Reflect1 = Reflect()
+            Reflect1.Plane = plane
+
         
         DataRepresentation5 = Show()
         DataRepresentation5.EdgeColor = [0.0, 0.0, 0.0]
@@ -200,18 +201,10 @@ class Ace3pAnimataion(object):
         #reflect particles
         if self.use_track3p:
             SetActiveSource(self.p_ts)
-            #Reflect2 = Reflect()
-            #Reflect2.Plane = 'Z'
-            
-            #DataRepresentation6 = Show()
-            #DataRepresentation6.ScalarOpacityUnitDistance = 0.054125344521691682
-            #DataRepresentation6.Texture = []
-            #DataRepresentation6.EdgeColor = [0.0, 0.0, 0.0]
-            #DataRepresentation6.Visibility = 0
-        
-        
-            Reflect3 = Reflect()
-            Reflect3.Plane = 'X'
+
+            for plane in self.reflections:
+                Reflect1 = Reflect()
+                Reflect1.Plane = plane
             
             DataRepresentation7 = Show()
             #DataRepresentation7.ScalarOpacityUnitDistance = 0.043229431222641161
@@ -219,14 +212,36 @@ class Ace3pAnimataion(object):
             DataRepresentation7.EdgeColor = [0.0, 0.0, 0.0]
     
         UpdatePipeline()
-        bounds = mesh.GetDataInformation().GetBounds() #FIXME: doesn't take reflection into account
+        bounds = mesh.GetDataInformation().GetBounds() 
         self.bounds = [[bounds[i*2], bounds[i*2+1]] for i in range(3)]
-        print self.bounds 
+        
+        # For some reason GetBounds does not include reflections so update bounds
+        # with the new limits
+        for plane in self.reflections:
+            if plane == 'X':
+                b = max(abs(self.bounds[0][0]), abs(self.bounds[0][1]))
+                self.bounds[0] = [-b, b]
+            elif plane == 'X min':
+                self.bounds[0][0] -= self.bounds[0][1] - self.bounds[0][0]
+            elif plane == 'X max':
+                self.bounds[0][1] += self.bounds[0][1] - self.bounds[0][0]
+            if plane == 'Y':
+                b = max(abs(self.bounds[1][0]), abs(self.bounds[1][1]))
+                self.bounds[1] = [-b, b]
+            elif plane == 'Y min':
+                self.bounds[1][0] -= self.bounds[1][1] - self.bounds[1][0]
+            elif plane == 'Y max':
+                self.bounds[1][1] += self.bounds[1][1] - self.bounds[1][0]
+            if plane == 'Z':
+                b = max(abs(self.bounds[2][0]), abs(self.bounds[2][1]))
+                self.bounds[2] = [-b, b]
+            elif plane == 'Z min':
+                self.bounds[2][0] -= self.bounds[2][1] - self.bounds[2][0]
+            elif plane == 'Z max':
+                self.bounds[2][1] += self.bounds[2][1] - self.bounds[2][0]
         
     def play(self, camera_position, camera_movements=[], background_color=[0.0, 0.0, 0.0],
              antialias=1, peels=4, GUI=True, mono=True, stereo=False, speedup = 1):
-        print "starting play"
-        
         view = GetRenderView()
         view.Background = background_color # background color
         # Controls the number of passes in the rendering algorithm. A higher 
