@@ -5,18 +5,9 @@
 
 try: paraview.simple
 except: from paraview.simple import *
-from ace3p_animation import Ace3pAnimataion, CameraPosition, CameraMovement
-#except: 
-#    import os
-#    thisdir = __file__
-#    thisdir = os.path.dirname(thisdir)
-#    exec("from " + os.path.join(thisdir, "ace3p_animation") + 
-#             " import Ace3pAnimataion, CameraPosition, CameraMovement")
+from ace3p_animation import Ace3pAnimataion
+from general_camera import GeneralCamera, CameraMovement
 from math import pi
-################################################################################
-# prevent goofy camera behavior
- 
-paraview.simple._DisableFirstRenderCameraReset()
 
 ################################################################################
 anime = Ace3pAnimataion(mesh_file = '/home/jrr45/small_gap/small_gap_6.0.ncdf',
@@ -25,17 +16,13 @@ anime = Ace3pAnimataion(mesh_file = '/home/jrr45/small_gap/small_gap_6.0.ncdf',
             reflections=['X'])
 
 ################################################################################
-anime.load_files()
-
 #find the center of the mesh
-xbounds, ybounds, zbounds = anime.bounds
-x = (xbounds[1]+xbounds[0])/2
-y = (ybounds[1]+ybounds[0])/2
-z = (zbounds[1]+zbounds[0])/2
+x, y, z = anime.get_center()
 
-position = CameraPosition(focus=[x, y, z], 
-                          radius=1.0, theta=-pi/2, phi=pi/2, #theta=3*pi/2, phi=pi/2-pi/8, 
+camera = GeneralCamera(camera_movements=[],
+                          focus=[x, y, z], 
+                          radius=.83, theta=-pi/2, phi=43*pi/100,
                           up=[-1.0,0.0,0.0], psi=0)
 
-anime.play(camera_position=position, 
-           camera_movements=[], GUI=False, antialias=2)
+anime.play(camera=camera, 
+           GUI=False, antialias=2)

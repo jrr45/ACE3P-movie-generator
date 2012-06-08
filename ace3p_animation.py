@@ -1,81 +1,5 @@
 import sys, os, glob
-from math import pi, sin, cos, sqrt
 from paraview.simple import *
-from numpy import cross, array
-
-class CameraPosition(object):
-    def __init__(self, focus, radius=0, theta=0, phi=0, up=[0.0,1.0,0.0], psi=0):
-        self.view = GetRenderView()
-        self.focus = focus
-        self.radius = radius
-        self.theta = theta
-        self.phi = phi
-        self.psi = psi
-        self.tol = 10e-14
-        
-        #check to see if up vector is parallel to camera vector
-        current = (self.focus[0] + self.radius*sin(self.phi)*cos(self.theta), 
-                   self.focus[1] + self.radius*sin(self.phi)*sin(self.theta),
-                   self.focus[2] + self.radius*cos(self.phi))
-        vcamera = array([current])
-        crossproduct = cross(array(up), vcamera)[0]
-        if abs(crossproduct[0]) < self.tol and abs(crossproduct[1]) < self.tol and \
-           abs(crossproduct[2]) < self.tol:
-            print "up vector can not be parallel to initial camera focus"
-            exit(-1)
-        
-        #normalize up vector
-        norm = sqrt(up[0]**2 + up[1]**2 + up[2]**2)
-        self.up = [up[0]/norm, up[1]/norm, up[2]/norm]
-        print self.up
-        
-        
-    def update_camera(self):
-        print "updating"
-        camera = GetActiveCamera()
-        camera.SetFocalPoint(self.focus)
-        camera.SetPosition(self.focus[0] + self.radius*sin(self.phi)*cos(self.theta), 
-                           self.focus[1] + self.radius*sin(self.phi)*sin(self.theta),
-                           self.focus[2] + self.radius*cos(self.phi))
-        
-        # rotation of the up vector around the camera vector
-        [x, y, z] = self.up
-        [u, v, w] = camera.GetPosition()
-        calc1 = (u*x + v*y + w*z)*(cos(self.psi) - 1)
-        calc2 = cos(self.psi)
-        calc3 = sin(self.psi)
-        camera.SetViewUp(-u*calc1 + x*calc2 + (-w*y + v*z)*calc3,
-                         -v*calc1 + y*calc2 + ( w*x - u*z)*calc3,
-                         -w*calc1 + z*calc2 + (-v*x + u*y)*calc3)
-        print camera.GetViewUp()
-        
-
-class CameraMovement(object):
-    def __init__(self, duration, translation=[0,0,0], radius=0, theta=0, phi=0, psi=0):
-        if duration < 1:
-            raise ValueError("duration can not be less than 1")
-        self.duration = duration
-        self.translation = translation
-        self.radius = radius
-        self.theta = theta
-        self.phi = phi
-        self.psi = psi
-        
-    def update_camera(self, camera_position):
-        camera_position.radius += self.radius/self.duration
-        camera_position.theta  += self.theta /self.duration
-        camera_position.phi    += self.phi   /self.duration
-        camera_position.radius += self.radius/self.duration
-        camera_position.radius += self.radius/self.duration
-        
-        #rotate the up vector - FIXME
-        [u, v, w] = camera_position.up
-        calc2 = w*(1-cos(self.theta /self.duration))
-        calc3 = sin(self.theta /self.duration)
-        camera_position.up = [u*calc2 + v*calc3,
-                   v*calc2 - u*calc3,
-                   w*calc2 + calc3]
-        
         
 class Ace3pAnimataion(object):
     """holds all information related to the animation of ACE3P"""
@@ -117,19 +41,18 @@ class Ace3pAnimataion(object):
                 sys.exit(0)
                 
         self.reflections = reflections
-            
-    def load_files(self):
+
         # Load mesh
-        mesh = SLACDataReader(MeshFileName=self.mesh_file)
-        mesh.ModeFileName = [self.mode_file]
-        mesh.ReadInternalVolume = 1
+        self.mesh = SLACDataReader(MeshFileName=self.mesh_file)
+        self.mesh.ModeFileName = [self.mode_file]
+        self.mesh.ReadInternalVolume = 1
         
         if self.use_track3p:
             # Load the particles
             self.p_ts = SLACParticleDataReader(FileName=self.particleFilenames)
             self.times = self.p_ts.TimestepValues
         else:
-            self.times = mesh.TimestepValues.GetData()
+            self.times = self.mesh.TimestepValues.GetData()
 
         a3_efield_PVLookupTable = GetLookupTableForArray("efield", 3,
                                                           RGBPoints=[0.0, 0.0, 0.0, 1.0, 22.701986109850427, 1.0, 0.0, 0.0],
@@ -138,7 +61,7 @@ class Ace3pAnimataion(object):
                                                           ScalarRangeInitialized=1.0)
         a3_efield_PiecewiseFunction = CreatePiecewiseFunction()
         
-        SetActiveSource(mesh)
+        SetActiveSource(self.mesh)
         DataRepresentation1 = Show()
         DataRepresentation1.EdgeColor = [0.0, 0.0, 0.0]
         DataRepresentation1.ScalarOpacityUnitDistance = 0.034588492113178465
@@ -150,6 +73,7 @@ class Ace3pAnimataion(object):
         DataRepresentation1.BackfaceRepresentation = 'Surface'
         DataRepresentation1.Visibility = 0
         
+        #outline box
         DataRepresentation2 = Show()
         DataRepresentation2.Visibility = 0
         DataRepresentation2.Representation = 'Outline'
@@ -166,8 +90,7 @@ class Ace3pAnimataion(object):
             
         a3_efield_PVLookupTable.RGBPoints = [0.0, 0.0, 0.0, 1.0, 22.701986109850427, 1.0, 0.0, 0.0]
         
-        
-        SetActiveSource(mesh)
+        SetActiveSource(self.mesh)
         ExtractBlock1 = ExtractBlock()
         ExtractBlock1.BlockIndices = [7]
         
@@ -185,7 +108,6 @@ class Ace3pAnimataion(object):
         for plane in self.reflections:
             Reflect1 = Reflect()
             Reflect1.Plane = plane
-
         
         DataRepresentation5 = Show()
         DataRepresentation5.EdgeColor = [0.0, 0.0, 0.0]
@@ -207,12 +129,14 @@ class Ace3pAnimataion(object):
                 Reflect1.Plane = plane
             
             DataRepresentation7 = Show()
-            #DataRepresentation7.ScalarOpacityUnitDistance = 0.043229431222641161
+            DataRepresentation7.ScalarOpacityUnitDistance = 0.043229431222641161
             DataRepresentation7.Texture = []
             DataRepresentation7.EdgeColor = [0.0, 0.0, 0.0]
     
         UpdatePipeline()
-        bounds = mesh.GetDataInformation().GetBounds() 
+        
+    def get_bounds(self):
+        bounds = self.mesh.GetDataInformation().GetBounds() 
         self.bounds = [[bounds[i*2], bounds[i*2+1]] for i in range(3)]
         
         # For some reason GetBounds does not include reflections so update bounds
@@ -239,8 +163,16 @@ class Ace3pAnimataion(object):
                 self.bounds[2][0] -= self.bounds[2][1] - self.bounds[2][0]
             elif plane == 'Z max':
                 self.bounds[2][1] += self.bounds[2][1] - self.bounds[2][0]
+        return self.bounds
+                
+    def get_center(self):
+        xbounds, ybounds, zbounds = self.get_bounds()
+        x = (xbounds[1]+xbounds[0])/2
+        y = (ybounds[1]+ybounds[0])/2
+        z = (zbounds[1]+zbounds[0])/2
+        return x, y, z
         
-    def play(self, camera_position, camera_movements=[], background_color=[0.0, 0.0, 0.0],
+    def play(self, camera, background_color=[0.0, 0.0, 0.0],
              antialias=1, peels=4, GUI=True, mono=True, stereo=False, speedup = 1):
         view = GetRenderView()
         view.Background = background_color # background color
@@ -249,9 +181,10 @@ class Ace3pAnimataion(object):
         view.DepthPeeling = 0 
         view.MaximumNumberOfPeels = peels
         viewScale = 4
-        view.ViewSize = [475, 300]
+        view.ViewSize = [480, 270]
         
         if GUI:
+            camera.update_camera(0)
             Render()
         else:
             times = self.times
@@ -262,35 +195,19 @@ class Ace3pAnimataion(object):
                 outFilenameEnd = "_particles.png"
             else:
                 outFilenameEnd = "_mod.png"
-        
-            camera_position.update_camera()
-            index = 0
-            movelen = len(camera_movements)
-               
-            if movelen < index:
-                movement = camera_movements[index]
-            else:
-                movement = None
+                
+            if not os.path.exists("movie_images"):
+                os.mkdir("movie_images")
             
             for ts in range(lentimes):
-                if movement != None:
-                    movement.update_camera(camera_position)
-                    camera_position.update_camera()
-                    movement.duration -= 1
-                    
-                    if movement.duration == 0:
-                        if movelen < index:
-                            movement = camera_movements[index]
-                            index += 1
-                        else:
-                            movement = None
 
                 if ts % speedup != 0:
                     continue
                 
+                camera.update_camera(ts)
                 
                 now = times[ts] # simulation time
-                outFilename = str(ts).zfill(digits) + outFilenameEnd
+                outFilename = "movie_images/" + str(ts).zfill(digits) + outFilenameEnd
                 
                 print "===> Computing for '%s' ... of %i" % (outFilename, lentimes-1)
                 
@@ -313,46 +230,11 @@ class Ace3pAnimataion(object):
                     view.StereoRender = 0
                     Show()
                     WriteImage(outFilename, Magnification=viewScale*antialias)
-                
+                    
+            if stereo:
+                print "boo"
+            else:
+                print "now run:"
+                print ("ffmpeg -i movie_images/%0" + str(digits) + "d_particles.png -s 1920x1080 " +
+                      "movie.mp4")
 
-                
-                
-                # parametric fraction of animation seq.  in [0,1]
-                #t = t_from_time(now) 
-                
-                ##########################################################################
-                # move camera
-                
-                # position
-                #(x, y, z) = xyz_from_ts(ts)
-                #theta = (2.0 * pi / (48 * 30)) * ts
-                #(x, z) = (x * cos(theta) + z * sin(theta), -x * sin(theta) + z * cos(theta))
-                
-                #x *= 1.4
-                #y *= 1.4
-                #z *= 1.4
-        
-                #view.CameraPosition = [x, y, z]
-        
-                # focal point
-                #radius = 1.24
-                #(fx, fy, fz) = getFocalPoint(x, y, z, radius)
-                #(fx, fy, fz) = focus_from_ts(ts)
-                #view.CameraFocalPoint = [fx, fy, fz]
-        
-                # compute up vector
-                #(vx, vy, vz) = (fx - x, fy - y, fz - z) # view vector
-                #(lx, ly, lz) = (0.0, 1.0, 0.0)    # "left" vector
-        
-              
-                #ux = vy * lz - vz * ly # view x left = up
-                #uy = vz * lx - vx * lz
-                #uz = vx * ly - vy * lx
-        
-                #view.CameraViewUp = [ux, uy, uz]
-        
-                #print "ts:", ts
-                #print "     x,  y,  z:", x, y, z
-                #print "    fx, fy, fz:", fx, fy, fz
-        
-                #continue
