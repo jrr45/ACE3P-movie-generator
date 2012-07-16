@@ -2,21 +2,44 @@ import sys, os, glob
 from paraview.simple import *
         
 class Ace3pAnimataion(object):
-    """holds all information related to the animation of ACE3P"""
+    """ Holds all information related to the animation of ACE3P"""
     def __init__(self, mesh_file,
              mode_files=[],
              trac3p_results="",
-             reflections=[], # http://www.itk.org/Wiki/ParaView/Users_Guide/List_of_filters#Reflect
+             reflections=[],
              sidesetIDs=[6],
              field='efield',
-             VectorMode='Magnitude',#['Magnitude', 'Component']
-             VectorComponent='X',#['X','Y', 'Z'] only used if VectorMode='Component'
+             VectorMode='Magnitude',
+             VectorComponent='X',
              ColorSpace='HSV',
              RGBmin=[0.0, 0.0, 1.0],
              RGBmax=[1.0, 0.0, 0.0],
-             Representation='Wireframe', #['Outline', 'Points', 'Wireframe', 'Surface', 'Surface With Edges'] 
+             Representation='Wireframe', 
              BackfaceRepresentation='Surface'
              ):
+        """
+            mode_files             is a list of mode files to display
+            track3p_results        is the top directory of the track3p results that contain particle 
+                                       information
+            reflections            is a list of (strings) reflections for the mesh, possible 
+                                       values are found:
+                                http://www.itk.org/Wiki/ParaView/Users_Guide/List_of_filters#Reflect
+            sidesetIDs             is a list of sides to display that correspond to the SideSet IDs
+                                       in Cubit field is which type of field to display: efield, 
+                                       bfield, etc.
+            VectorMode             can be either 'Magnitude' or 'Component' and specifies what 
+                                       portion of the field to display
+            VectorComponent        can be 'X','Y', or 'Z' and is used to specify what component is 
+                                       displayed if VectorMode='Component'
+            ColorSpace             is what type of color scale to display, values are listed in 
+                                       Paraview's Color Scale Editor
+            RGBmin and RGBmax      are the min and max colors to display from the color scale in RGB
+                                       values from 0.0 to 1.0
+            Representation         is how to display the interior of the mesh, possible values are:
+                                       'Outline', 'Points', 'Wireframe', 'Surface', or
+                                       'Surface With Edges' 
+            BackfaceRepresentation is how to display the exterior or back face of the mesh
+        """
          
         # prevent goofy camera behavior
         paraview.simple._DisableFirstRenderCameraReset()
@@ -48,7 +71,8 @@ class Ace3pAnimataion(object):
                 sys.exit(0)
         
             
-            self.particleFilenames = glob.glob(os.path.join(particledir, "[0-9]*","partpath_ts*.ncdf"))
+            self.particleFilenames = glob.glob(os.path.join(particledir, "[0-9]*",
+                                                            "partpath_ts*.ncdf"))
             self.particleFilenames.sort()
             
             if len(self.particleFilenames) == 0:
@@ -135,6 +159,10 @@ class Ace3pAnimataion(object):
     
         UpdatePipeline()
         
+    def get_timestep_values(self):
+        """ Returns the time steps to run the simulation
+            if the mode file doesn't have times then 100 steps are shown for the simulation
+        """
         #get time information
         if self.use_track3p:
             self.times = self.p_ts.TimestepValues
@@ -146,9 +174,11 @@ class Ace3pAnimataion(object):
                 timerange = self.mesh.GetProperty('TimeRange') 
                 steps = 100
                 self.times = [timerange[1]*i/steps + timerange[0] for i in range(steps)]
+        return self.times
                 
         
     def get_bounds(self):
+        """ Returns the bounds of the mesh including the dimensions of any reflections """
         bounds = self.mesh.GetDataInformation().GetBounds() 
         self.bounds = [[bounds[i*2], bounds[i*2+1]] for i in range(3)]
         
@@ -179,71 +209,65 @@ class Ace3pAnimataion(object):
         return self.bounds
                 
     def get_center(self):
+        """ Returns the center of the mesh including the dimensions of any reflections """
         xbounds, ybounds, zbounds = self.get_bounds()
         x = (xbounds[1]+xbounds[0])/2
         y = (ybounds[1]+ybounds[0])/2
         z = (zbounds[1]+zbounds[0])/2
         return x, y, z
-    
-    def get_frame_range(self):
-        return [0, len(self.times)]
         
-    def play(self, camera, background_color=[0.0, 0.0, 0.0],
-             antialias=1, peels=4, GUI=True, mono=True, stereo=False, 
-             speedup = 1, frame_range=None):
+    def play(self, camera, 
+             background_color=[0.0, 0.0, 0.0],
+             antialias=1, peels=4, 
+             mono=True, stereo=False,
+             time_steps=[]):
+        """ Plays the animation and saves it as a series of images
+            camera           the camera and settings to setup the display
+            background_color in rgb values between 0.0 and 1.0
+            antialias        number of times to multiply the size of the image for anti-aliasing
+            peels            Controls the number of passes in the rendering algorithm. A higher 
+                                number of peels produces quality images, but increases rendering
+                                time.
+            mono/stero       is used to turn on/off the production of 2D/3D images
+            time_setps       is the list of time steps to display
+        """
+        # set up size and rendering information
         view = GetRenderView()
         view.Background = background_color # background color
-        # Controls the number of passes in the rendering algorithm. A higher 
-        # number of peels produces quality images, but increases rendering time.
+            # 
         view.DepthPeeling = 0 
         view.MaximumNumberOfPeels = peels
         viewScale = 4
         view.ViewSize = [480, 270]
         view.UseLight = 1
         
-        if GUI:
-            camera.update_camera(0)
-            Render()
-            return
-        
-        times = self.times
-        lentimes = len(times)
+        # Time info
+        if len(time_steps) == 0: 
+            time_steps = self.get_timestep_values()
+        lentimes = len(time_steps)
         digits = len(str(lentimes))
+        timerange = range(lentimes)
         
+        # file names and locations of images, will depend on if it has particles
         if self.use_track3p:
             outFilenameEnd = "_particles.png"
         else:
-            outFilenameEnd = "_mod.png"
+            outFilenameEnd = "_fields.png"
             
         if not os.path.exists("movie_images"):
             os.mkdir("movie_images")
         
-        # set the range to be used in the loop
-        if frame_range is not None:
-            if frame_range[0] >= 0 and frame_range[1] <= lentimes and \
-               frame_range[0] < frame_range[1]:
-                timerange = range(frame_range[0], frame_range[1])
-            else:
-                raise ValueError("invalid frame range")
-        else:
-            timerange = range(lentimes)
-        
+        # iterate over each frame in the simulation and save in a image file
         for ts in timerange:
-
-            if ts % speedup != 0:
-                continue
-            
             camera.update_camera(ts)
+            now = time_steps[ts]
+            view.ViewTime = now
             
-            now = times[ts] # simulation time
+            # print file and frame info
             outFilename = "movie_images/" + str(ts).zfill(digits) + outFilenameEnd
-            
             print "===> Computing for '%s' ... of %i" % (outFilename, lentimes-1)
             
-            ##########################################################################
-            # update time to now, and show the results 
-            view.ViewTime = now
-    
+            # save the results in an image file
             if stereo:
                 view.StereoRender = 1
     
@@ -259,7 +283,8 @@ class Ace3pAnimataion(object):
                 view.StereoRender = 0
                 Show()
                 WriteImage(outFilename, Magnification=viewScale*antialias)
-                
+        
+        # Hints on what to do with movie images
         if stereo:
             print ("The ffmpeg command will vary depending on how you are constructing the " +
                   "3D movie")

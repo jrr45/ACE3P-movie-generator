@@ -5,6 +5,14 @@ from paraview.simple import *
 
 class CameraMovement(object):
     def __init__(self, duration, translation=[0,0,0], radius=0, theta=0, phi=0, psi=0):
+        """ Dictates how the camera should move
+            duration    is the number of frames the movement should take
+            translation is the vector distance the focus point should move
+            radius      is the radial distance the camera should move relative to the focus point
+            theta       is the angle the camera should move relative to the focus point
+            phi         is the angle the camera should move relative to the focus point
+            psi         is the angle the camera should move relative to up
+        """
         if duration < 1:
             raise ValueError("duration can not be less than 1")
         self.duration = duration
@@ -33,12 +41,12 @@ class CameraMovement(object):
 class GeneralCamera(Camera):
     def __init__(self, *arguments, **keywords):
         """A general camera based on spherical coordinates with the following arguments:
-           focus = [0.0, 0.0, 0.0]
-           radius = 0
-           theta = 0
-           phi = 0
-           up = [0.0, 1.0, 0.0]
-           psi = 0
+           focus = [0.0, 0.0, 0.0] focus position
+           radius = 0    radial distance from focus
+           theta = 0     camera angle from focus (spherical coordinates)
+           phi = 0       camera angle from focus (spherical coordinates)
+           up = [0.0, 1.0, 0.0]  direction of up
+           psi = 0       camera angle from up
         """
         super( Camera, self ).__init__()
 
@@ -86,6 +94,7 @@ class GeneralCamera(Camera):
         
         
     def update_camera(self, framenumber):
+        """updates the camera given a frame number"""
         focus = self.focus
         theta = self.theta
         phi = self.phi
