@@ -1,0 +1,36 @@
+====== INSTALL ======
+You will need paraview with python bindings to be able to run this script.  If you are building 
+paraview you must use ccmake/cmake to turn on the VTK_WRAP_PYTHON_SIP flag.
+
+You should then add the build folder to your path and python path.
+My .bashrc:
+PARAVIEW_DIR=/home/jrr45/paraview
+export PYTHONPATH=$PYTHONPATH:$PARAVIEW_DIR/Utilities/VTKPythonWrapping/site-packages/:$PARAVIEW_DIR/bin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$PARAVIEW_DIR/bin
+
+You also need to install the numpy python package to use the general camera (explained below)
+
+====== FILES INCLUDED ======
+There are several files included:
+	- ace3p_animation.py is a python class that runs the animation and outputs images
+	- generic_pvframes.py is an example run script that calls ace3p_animation and will be the main
+	  file you need to edit
+	- camera.py is an abstract class that you can extend to say how the camera is positioned and 
+	  configured
+	- general_camera.py is a implementation of camera that lets you configure/move the display
+	  on angles and distances relative to the focal point
+	  
+====== HOW TO USE ======
+You mainly need to edit (or create a new) generic_pvframes.py script to run.  This script should
+call Ace3pAnimataion functions (parameters are documented in the file) Ace3pAnimataion() and play()
+
+Ace3pAnimataion.get_bounds() get_center() and time_steps() are all utility functions to help set up
+camera movements.  
+
+GeneralCamera uses a list of CameraMovement(s) that describe a how the camera should move over a
+number of frames.  If no movements are supplied or there are more frames than the length of all
+the movements combined the camera will remain at the last given position.
+
+The animation will be saved to a series of images in move_images/ and can be converted to a movie
+with a separate program like ffmpeg or Quicktime Pro.  You can split the animation into several 
+scripts by separating the timesteps given to play() into different files.
